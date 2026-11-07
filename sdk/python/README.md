@@ -286,6 +286,15 @@ first tool call onward are held until the stream ends and checked before your
 code sees them, and the streamed usage counts toward the budget. Async clients
 and Anthropic's `messages.stream()` helper are not patched.
 
+`jamjet.policy("require_approval", "payments.*")` keeps the tool available.
+When the model calls it, the SDK opens an approval in JamJet Cloud with the
+tool name, call id, arguments, model and rule, and waits for a reviewer's
+decision before returning the response. A rejection raises
+`JamJetApprovalRejected`. No decision within `approval_timeout_seconds`
+(a `configure()` argument, default 1 hour), or no way to reach Cloud, raises
+`JamJetApprovalTimeout`. The timeout is sent to Cloud as the approval's
+deadline; Cloud holds an approval for 1 minute to 24 hours.
+
 Install with the LLM SDK you use:
 
 ```bash

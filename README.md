@@ -135,7 +135,8 @@ import jamjet
 jamjet.cloud.configure(api_key="jj_...", project="my-agent")
 jamjet.cloud.policy("block", "*delete*")
 jamjet.cloud.policy("require_approval", "database.*")
-# Every OpenAI / Anthropic call in this process is now policy-gated.
+# Sync OpenAI and Anthropic calls in this process are now policy-gated:
+# *delete* tools are stripped, and a database.* tool call waits for approval.
 ```
 
 → Runnable approval workflow in **[`examples/hitl-approval`](examples/hitl-approval)** · [Cloud Quickstart](https://docs.jamjet.dev/en/docs/cloud-quickstart)

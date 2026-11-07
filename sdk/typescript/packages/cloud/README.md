@@ -110,6 +110,15 @@ Blocked tools are stripped before the model sees them (OpenAI `function` and
 blocked tool throws `JamjetPolicyBlocked`. Budget exhaustion throws
 `JamjetBudgetExceeded` before the next call goes out.
 
+A `require_approval` rule keeps the tool available to the model. When the
+model calls it, the SDK opens an approval in JamJet Cloud with the tool name,
+call id, arguments, model and rule, and waits for a reviewer's decision before
+your code gets the response. Rejection throws `JamjetApprovalRejected`. No
+decision within `approvalTimeoutMs` (init option, default 1 hour), or no way to
+reach Cloud, throws `JamjetApprovalTimeout`. The timeout is sent to Cloud as
+the approval's deadline; Cloud holds an approval for 1 minute to 24 hours and
+refuses decisions after it.
+
 Streaming calls get the same checks. Text streams through as it arrives; once
 any policy rule is set, chunks from the first tool call onward are held until
 the stream ends, checked, and only then handed to your code. Usage and cost are
@@ -160,6 +169,7 @@ init({
   redaction: { mode: 'standard' }, // 'strict' | 'standard' | 'off'
   sampling: { rate: 1.0 },         // 0.0–1.0; errors and approvals always kept
   debug: false,                    // throws transport errors when true
+  approvalTimeoutMs: 3_600_000,    // how long a require_approval call waits (1 min to 24 h)
 })
 ```
 

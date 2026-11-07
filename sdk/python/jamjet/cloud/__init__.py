@@ -15,6 +15,7 @@ from .patcher import patch_all, unpatch_all
 from .policy import get_evaluator
 from .propagation import extract_headers, inject_headers
 from .redaction import redact
+from .remote_policy import RemotePolicies
 from .trace import trace
 from .user_context import set_process_context, set_user_context, user_context
 
@@ -30,6 +31,7 @@ __all__ = [
     "policy",
     "record_outcome",
     "redact",
+    "refresh_policies",
     "require_approval",
     "set_user_context",
     "trace",
@@ -54,6 +56,7 @@ def configure(
     policy_path: str | None = None,
     telemetry: bool = True,
     approval_timeout_seconds: float = 3600.0,
+    remote_policies: bool | None = None,
 ) -> None:
     """Initialize the JamJet Cloud SDK.
 
@@ -75,13 +78,21 @@ def configure(
             ``JAMJET_MIDDLEWARE_ENABLED`` env-var is not set to ``"1"``) the
             chain remains empty and the patcher is byte-identical to the
             pre-Phase-1 path.
-        telemetry: set to ``False`` to suppress background policy-sync HTTP
-            requests. Primarily useful in tests.
+        telemetry: set to ``False`` to suppress the background Cloud policy
+            sync (see ``remote_policies``). Primarily useful in tests.
         approval_timeout_seconds: how long a tool call matched by a
             ``require_approval`` rule waits for a decision in JamJet Cloud
             before raising ``JamJetApprovalTimeout``. Sent to Cloud as the
             approval's deadline; Cloud holds an approval for 1 minute to 24
             hours and refuses decisions after it. Default 1 hour.
+        remote_policies: apply the block and require_approval rules managed in
+            JamJet Cloud, alongside local ``policy()`` rules (the stricter
+            decision wins). ``True`` loads them before ``configure()`` returns
+            and fails closed: if they cannot be loaded, the failure is logged
+            and every tool call is blocked until :func:`refresh_policies`
+            succeeds. ``None`` (default) loads them in the background when
+            ``telemetry`` is on; a failure is logged as a warning and only
+            local rules apply. ``False`` skips Cloud rules.
     """
     set_config(
         api_key=api_key,
@@ -127,31 +138,31 @@ def configure(
     if auto_patch:
         patch_all()
 
-    # Sync policies from server in background (skip when telemetry=False, e.g. tests)
-    if telemetry:
-        cfg = get_config()
-        t = threading.Thread(target=_sync_policies, args=(cfg.api_key, cfg.api_url, project), daemon=True)
-        t.start()
+    # Cloud-managed policies. See remote_policy.py for how they are applied.
+    evaluator = get_evaluator()
+    evaluator.remote = None
+    cfg = get_config()
+    if remote_policies is True:
+        if not cfg.api_key:
+            raise ValueError("remote_policies=True needs an api_key to read policies from JamJet Cloud.")
+        evaluator.remote = RemotePolicies(cfg.api_key, cfg.api_url, environment, required=True)
+        evaluator.remote.load()
+    elif remote_policies is None and telemetry and cfg.api_key:
+        evaluator.remote = RemotePolicies(cfg.api_key, cfg.api_url, environment, required=False)
+        threading.Thread(target=evaluator.remote.load, daemon=True, name="jamjet-policy-sync").start()
 
 
-def _sync_policies(api_key: str | None, api_url: str, project: str) -> None:
-    """Fetch policies from the server and load them into the local evaluator."""
-    if not api_key:
-        return
-    try:
-        import httpx
+def refresh_policies() -> bool:
+    """Reload the Cloud-managed policies (see ``configure(remote_policies=...)``).
 
-        resp = httpx.get(
-            f"{api_url}/v1/projects/{project}/policies",
-            headers={"Authorization": f"Bearer {api_key}"},
-            timeout=10,
-        )
-        if resp.status_code == 200:
-            evaluator = get_evaluator()
-            for rule in resp.json().get("rules", []):
-                evaluator.add(rule["action"], rule["pattern"])
-    except Exception:
-        pass  # Graceful degradation — local policies still work
+    Returns True when they loaded. A failure is logged; with
+    ``remote_policies=True`` every tool call stays blocked until a refresh
+    succeeds. Returns False when remote policies are not configured.
+    """
+    remote = get_evaluator().remote
+    if remote is None:
+        return False
+    return remote.load()
 
 
 def policy(action: str, tools: str) -> None:

@@ -295,6 +295,15 @@ decision before returning the response. A rejection raises
 `JamJetApprovalTimeout`. The timeout is sent to Cloud as the approval's
 deadline; Cloud holds an approval for 1 minute to 24 hours.
 
+Block and approval rules managed in the JamJet Cloud dashboard apply too. By
+default they load in the background and a failure is logged as a warning.
+`configure(..., remote_policies=True)` loads them before `configure()` returns
+and fails closed: if Cloud cannot be read, every tool call is blocked until
+`jamjet.refresh_policies()` succeeds. The stricter of a local and a Cloud
+decision wins. Cloud decides its own rules (dry-run, agent scope,
+environment), so a tool name that a Cloud rule could match is checked against
+Cloud once per tool, agent and environment.
+
 Install with the LLM SDK you use:
 
 ```bash

@@ -3,7 +3,7 @@ import type { Client } from './client.js'
 import type { AgentRef, UserContext } from './context.js'
 import { applyCacheInject } from './cache-inject.js'
 import { applyCompaction } from './compaction.js'
-import { estimateCost } from './cost.js'
+import { cacheReadSavingsUsd, estimateCost } from './cost.js'
 import { DEFAULT_APPROVAL_TIMEOUT_MS, pollUntilResolved } from './approvals.js'
 import { JamjetApprovalRejected, JamjetApprovalTimeout, JamjetPolicyBlocked } from './errors.js'
 import { toolNameOf } from './policy.js'
@@ -100,19 +100,6 @@ function extractUsage(vendor: Vendor, response: unknown): { input: number; outpu
 function extractCacheRead(_vendor: Vendor, response: unknown): number {
   const usage = ((response as Record<string, any>)?.usage ?? {}) as Record<string, unknown>
   return Number(usage['cache_read_input_tokens'] ?? 0) || 0
-}
-
-// Per-MTok savings = input price − cache_read price; mirrors pricing.rs v_2026_05_17.
-const CACHE_SAVING_PER_MTOK: Record<string, number> = {
-  'claude-opus-4-7': 15.0 - 1.5,
-  'claude-sonnet-4-6': 3.0 - 0.3,
-  'claude-haiku-4-5': 1.0 - 0.1,
-  'claude-haiku-4-5-20251001': 1.0 - 0.1,
-}
-
-function cacheReadSavingsUsd(model: string, cacheReadTokens: number): number {
-  const per = CACHE_SAVING_PER_MTOK[model] ?? 0
-  return (cacheReadTokens / 1_000_000) * per
 }
 
 export async function runEnforcedCall(opts: EnforcedCallOptions): Promise<unknown> {

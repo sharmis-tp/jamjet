@@ -18,29 +18,11 @@ from .middleware.context import (
 )
 from .middleware.receipts import build_llm_receipt, emit_receipt
 from .policy import _field, get_evaluator, tool_name_of
+from .pricing import estimate_cost
 from .redaction import _config as _redaction_config
 from .redaction import _redact_dict
 from .stream_enforcement import StreamedToolCall, StreamTally, enforce_stream
 from .trace import get_context
-
-# ---------------------------------------------------------------------------
-# Cost estimation per-model (USD per token)
-# ---------------------------------------------------------------------------
-
-_COST_PER_TOKEN: dict[str, tuple[float, float]] = {
-    # (input_cost_per_token, output_cost_per_token)
-    "gpt-4o": (2.5e-6, 10e-6),
-    "gpt-4o-mini": (0.15e-6, 0.6e-6),
-    "gpt-4-turbo": (10e-6, 30e-6),
-    "gpt-4": (30e-6, 60e-6),
-    "gpt-3.5-turbo": (0.5e-6, 1.5e-6),
-    "claude-sonnet-4-6": (3e-6, 15e-6),
-    "claude-sonnet-4-20250514": (3e-6, 15e-6),
-    "claude-opus-4-6": (15e-6, 75e-6),
-    "claude-opus-4-20250514": (15e-6, 75e-6),
-    "claude-3-5-haiku-20241022": (0.8e-6, 4e-6),
-    "claude-3-haiku-20240307": (0.25e-6, 1.25e-6),
-}
 
 _originals: dict[str, Any] = {}
 
@@ -68,12 +50,8 @@ def _runtime_state() -> _RuntimeState:
 
 
 def _estimate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
-    """Estimate cost in USD for a given model and token counts."""
-    rates = _COST_PER_TOKEN.get(model)
-    if rates is None:
-        # Fallback: rough average
-        return (input_tokens * 3e-6) + (output_tokens * 15e-6)
-    return (input_tokens * rates[0]) + (output_tokens * rates[1])
+    """Estimate cost in USD for a given model and token counts (see pricing.py)."""
+    return estimate_cost(model, input_tokens, output_tokens)
 
 
 # ---------------------------------------------------------------------------

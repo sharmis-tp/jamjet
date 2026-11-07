@@ -28,8 +28,13 @@ export function toolNameOf(tool: unknown): string {
   return typeof t['name'] === 'string' ? t['name'] : ''
 }
 
+/**
+ * Tool-name glob, per sdk/conformance/README.md: `*` is any run of characters
+ * (line breaks included), `?` is one code point, everything else is literal,
+ * case-sensitive. The Python SDK implements the same spec and both test
+ * against sdk/conformance/cloud-sdk-vectors.json.
+ */
 function globToRegExp(pattern: string): RegExp {
-  // fnmatch semantics: * matches any chars (including dots), ? matches single, escape regex specials
   let re = ''
   for (const ch of pattern) {
     if (ch === '*') re += '.*'
@@ -37,7 +42,8 @@ function globToRegExp(pattern: string): RegExp {
     else if (/[.+^${}()|[\]\\]/.test(ch)) re += '\\' + ch
     else re += ch
   }
-  return new RegExp(`^${re}$`)
+  // s: `.` also matches line breaks. u: `.` is a code point, not a UTF-16 unit.
+  return new RegExp(`^${re}$`, 'su')
 }
 
 export class PolicyEvaluator {
